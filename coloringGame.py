@@ -40,6 +40,7 @@ check_nash_equilibrium
 
 """
 import snap
+import random
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -48,7 +49,7 @@ TEMPLATE_GRAPH_PATH = "src/graph.txt"
 
 
 class coloring_game():
-    def __init__(self, node_num: int = 5, edge_prob: float = 0.5):
+    def __init__(self, node_num: int = 5, edge_prob: float = 0.5, node_mode = 0, random_seed = 42):
 
         self.template_graph_path = TEMPLATE_GRAPH_PATH
         self.graph = snap.GenRndGnp(snap.TUNGraph, node_num, edge_prob)
@@ -62,8 +63,9 @@ class coloring_game():
         self.edge_prob = edge_prob
         self.color_mode = 0
         self.node_color = [0] * node_num
-        self.node_mode = 0 # 0-> 1,2,3   1-> 3,2,1   2->random
-        self.random_seed = 42
+        self.node_mode = node_mode # 0-> 1,2,3   1-> 3,2,1   2->random
+        self.traverse_mode = "forward" # dfs, bfs, random forward reverse
+        self.random_seed = random_seed
         self.current_payoff = []
 
     def init_coloring(self, color_mode: int = 0):
@@ -79,16 +81,15 @@ class coloring_game():
         for i in range(self.node_num):
             self.node_color[i] = coloring[i]
 
-    def get_nodes(self, node_mode:int = 0, random_seed: int = 42):
-        self.node_mode = node_mode
+    def get_one_node(self):
+        node_mode = self.node_mode
 
         if node_mode == 0:
             return self.graph.BegNI()
         elif node_mode == 1:
             return self.graph.EndNI()
 
-        self.random_seed = random_seed
-        Rnd = snap.TRnd(random_seed)
+        Rnd = snap.TRnd(self.random_seed)
         Rnd.Randomize()
         return self.graph.GetRndNI(Rnd)
 
@@ -177,11 +178,96 @@ class coloring_game():
 
         return False
 
+    def set_node_mode(self, node_mode = 0, random_seed = 42):
+        self.node_mode = node_mode
+        self.random_seed = random_seed
+
+    def set_traverse_mode(self, traverse_mode="forward"):
+        self.traverse_mode = traverse_mode
+
+    def get_traverse_sequence(self, start_node_id):
+        """
+        根据 traverse_mode 遍历所有节点，返回依次访问的节点 id 列表
+        """
+        nodes = [node.GetId() for node in self.graph.Nodes()]
+
+        if self.traverse_mode == "forward":
+            # 升序排列后，找到起点索引，做环形拼接
+            sorted_nodes = sorted(nodes)
+            idx = sorted_nodes.index(start_node_id)
+            return sorted_nodes[idx:] + sorted_nodes[:idx]
+
+        elif self.traverse_mode == "reverse":
+            # 降序排列后，找到起点索引，做环形拼接
+            sorted_nodes = sorted(nodes, reverse=True)
+            idx = sorted_nodes.index(start_node_id)
+            return sorted_nodes[idx:] + sorted_nodes[:idx]
+
+        elif self.traverse_mode == "random":
+            # 随机模式：保证 start_node_id 是第一个，剩余节点打乱
+            rng = random.Random(self.random_seed)
+            other_nodes = [n for n in nodes if n != start_node_id]
+            rng.shuffle(other_nodes)
+            return [start_node_id] + other_nodes
+
+        elif self.traverse_mode == "bfs":
+            visited = {start_node_id}
+            queue = [start_node_id]
+            seq = []
+            while queue:
+                curr = queue.pop(0)
+                seq.append(curr)
+                for nbr in self.get_neighbors(curr):
+                    if nbr not in visited:
+                        visited.add(nbr)
+                        queue.append(nbr)
+            # 处理非连通图孤立节点
+            seq.extend([n for n in nodes if n not in visited])
+            return seq
+
+        elif self.traverse_mode == "dfs":
+            visited = set()
+            seq = []
+
+            def dfs(nid):
+                visited.add(nid)
+                seq.append(nid)
+                for nbr in self.get_neighbors(nid):
+                    if nbr not in visited:
+                        dfs(nbr)
+
+            dfs(start_node_id)
+            # 处理非连通图孤立节点
+            seq.extend([n for n in nodes if n not in visited])
+            return seq
+
+        else:
+            print(f"Warning: Traverse mode {self.traverse_mode} not supported.")
+            exit(-1)
+
     def move_to_nash_equilibrium(self):
         """
         对于所有顶点 遍历 improve_payoff
         flag 是否改变过颜色    直到一次整个遍历没有改变颜色
         """
+        # 如果对比还是不够的话 可以每一轮都改一个start node
+        start_node = self.get_one_node()
+        start_node_id = start_node.GetId()
+        color_change_flag = False
+        traverse_seq = self.get_traverse_sequence(start_node_id)
+        iterations = 0
+        # 现在的遍历是 随机/首/尾 顶点开始  逐一往后 对比的时候可以再加一个随机便利
+        # 首先完成首-> 末尾的
+        while 1:
+            for node_id in traverse_seq:
+                changed = self.improve_payoff(node_id)
+                if changed:
+                    color_change_flag = True
+            iterations += 1
+            # 如果整轮遍历结束后，没有节点改变颜色，说明已达到纳什均衡
+            if not color_change_flag:
+                print(f"Nash Equilibrium reached after {iterations} iterations.")
+                break
 
     def load_graph(self, file_path: str):
         self.graph = snap.LoadEdgeList(snap.PUNGraph, file_path, 0, 1)
