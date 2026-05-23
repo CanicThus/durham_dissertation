@@ -67,7 +67,7 @@ class coloring_game():
         self.node_mode = node_mode # 0-> 1,2,3   1-> 3,2,1   2->random
         self.traverse_mode = "forward" # dfs, bfs, random forward reverse
         self.random_seed = random_seed
-        self.current_payoff = [0] * (node_num + 1)
+        self.current_payoff = [-1] * (node_num + 1)
 
     def init_coloring(self, color_mode: int = 0):
         """
@@ -128,17 +128,17 @@ class coloring_game():
 
         return self.node_color.count(self.node_color[node_id]) - 1
 
-    def color_change_check(self, node_id, color_id):
+    def have_same_color_with_neighbours(self, node_id, color_id):
         """
-        if 相邻的顶点有相同颜色 return False
+        if 相邻的顶点有相同颜色 return Ture
         """
         neighbors = self.get_neighbors(node_id)
         for neighbor in neighbors:
             # print(f"node id {node_id}, neighbor id {neighbor}")
             if self.node_color[neighbor] == color_id:
-                return False
-
-        return True
+                return True
+            
+        return False
 
     def improve_payoff(self, node_id):
         """
@@ -154,14 +154,14 @@ class coloring_game():
             print(f"Improve payoff check: Node {node_id} does not exist in the graph.")
             return -1
 
-        current_payoff = self.get_payoff(node_id)
+        current_payoff = self.current_payoff[node_id]
         original_color = self.node_color[node_id]
 
         for new_color in range(self.node_num + 1):
             if new_color == original_color:
                 continue
 
-            if not self.color_change_check(node_id, new_color):
+            if self.have_same_color_with_neighbours(node_id, new_color):
                 continue
 
             # 2. 改变颜色
@@ -170,7 +170,7 @@ class coloring_game():
             # 获取改变颜色后的 payoff
             new_payoff = self.get_payoff(node_id)
 
-            # 3. 比较大小
+            # 如果和周围颜色相同或者可以改进payoff，那么改变颜色
             if new_payoff > current_payoff:
                 # yes 保存改变的颜色 (直接退出函数，返回 True 表示发生改变)
                 # self.node_color[node_id] = new_color
@@ -265,11 +265,13 @@ class coloring_game():
         # 首先完成首-> 末尾的
         while 1:
             for node_id in traverse_seq:
-                changed = self.improve_payoff(node_id)
-                if changed:
-                    color_change_flag = True
+                color_change_flag = self.improve_payoff(node_id)
             iterations += 1
+
             # 如果整轮遍历结束后，没有节点改变颜色，说明已达到纳什均衡
+            print(f"iterations: {iterations}")
+            self.print_result()
+
             if not color_change_flag:
                 print(f"Nash Equilibrium reached after {iterations} iterations.")
                 break
@@ -285,7 +287,7 @@ class coloring_game():
         self.node_num = self.graph.GetNodes()
 
         self.node_color = [0] * (self.node_num + 1)
-        self.current_payoff = [0] * (self.node_num + 1)
+        self.current_payoff = [-1] * (self.node_num + 1)
 
         print(f"load graph from {file_path}")
 
