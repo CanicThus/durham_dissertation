@@ -320,4 +320,5 @@ def test_class():
     agent.print_result()
 
 if __name__ == '__main__':
+    main()
     test_class()
