@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coloring Game Stepper</title>
+  <style>
+    :root {
+      --ink: #1d2433;
+      --muted: #647084;
+      --line: #d7dde7;
+      --paper: #f7f4ec;
+      --panel: #ffffff;
+      --accent: #146c70;
+      --accent-2: #b44b2a;
+      --accent-3: #d8a31d;
+      --ok: #1f7a4c;
+      --bad: #b42d2d;
+      --shadow: 0 16px 40px rgba(29, 36, 51, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
+      background:
+        linear-gradient(135deg, rgba(20, 108, 112, 0.14), transparent 34%),
+        linear-gradient(315deg, rgba(180, 75, 42, 0.11), transparent 38%),
+        var(--paper);
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) 380px;
+      gap: 18px;
+      width: min(1260px, calc(100vw - 32px));
+      margin: 20px auto;
+    }
+
+    .workspace,
+    .side {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(215, 221, 231, 0.9);
+      box-shadow: var(--shadow);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-rows: auto minmax(360px, 1fr) auto;
+      min-height: calc(100vh - 40px);
+    }
+
+    .topbar,
+    .statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .statusbar {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+      align-items: stretch;
+    }
+
+    .brand {
+      min-width: 220px;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .sub {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .mode-toggle {
+      display: flex;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .mode-cluster {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 6px 8px;
+      align-items: center;
+    }
+
+    .mode-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .mode-btn {
+      min-width: 58px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    .mode-btn:last-child {
+      border-right: 0;
+    }
+
+    .mode-btn.active {
+      background: var(--ink);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .btn {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .btn.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .btn.warn {
+      border-color: rgba(180, 75, 42, 0.5);
+      color: var(--accent-2);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .graph-wrap {
+      position: relative;
+      display: grid;
+      min-height: 440px;
+      place-items: center;
+      padding: 10px;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(29, 36, 51, 0.045) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(29, 36, 51, 0.045) 1px, transparent 1px);
+      background-size: 36px 36px;
+    }
+
+    svg {
+      width: min(100%, 820px);
+      height: auto;
+      aspect-ratio: 4 / 3;
+    }
+
+    .edge {
+      stroke: rgba(29, 36, 51, 0.28);
+      stroke-width: 2.5;
+    }
+
+    .node-ring {
+      stroke: rgba(29, 36, 51, 0.75);
+      stroke-width: 2;
+    }
+
+    .node-ring.next {
+      stroke: var(--accent-2);
+      stroke-width: 5;
+    }
+
+    .node-ring.changed {
+      stroke: var(--accent-3);
+      stroke-width: 6;
+    }
+
+    .node-text {
+      fill: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      pointer-events: none;
+    }
+
+    .node-meta {
+      fill: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+      paint-order: stroke;
+      stroke: rgba(255, 255, 255, 0.88);
+      stroke-width: 5px;
+      pointer-events: none;
+    }
+
+    .metric {
+      flex: 1;
+      min-width: 150px;
+      padding: 10px 12px;
+      background: rgba(247, 244, 236, 0.8);
+      border: 1px solid var(--line);
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric .value {
+      margin-top: 4px;
+      font-size: 19px;
+      font-weight: 800;
+    }
+
+    .side {
+      display: grid;
+      grid-template-rows: auto auto minmax(220px, 1fr);
+      min-height: calc(100vh - 40px);
+    }
+
+    .panel {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel:last-child {
+      border-bottom: 0;
+      overflow: auto;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      text-transform: uppercase;
+    }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      padding: 10px;
+      color: var(--ink);
+      background: #fff;
+      line-height: 1.45;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 8px 6px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    tr.next-row {
+      background: rgba(180, 75, 42, 0.1);
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      margin-right: 6px;
+      border: 1px solid rgba(29, 36, 51, 0.3);
+      vertical-align: -2px;
+    }
+
+    .log {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .log li {
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border: 1px solid currentColor;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .tag.ok {
+      color: var(--ok);
+    }
+
+    .tag.bad {
+      color: var(--bad);
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace,
+      .side {
+        min-height: auto;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100vw - 18px, 1260px);
+        margin: 9px auto;
+      }
+
+      .topbar,
+      .statusbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .controls {
+        justify-content: stretch;
+      }
+
+      .btn {
+        flex: 1;
+      }
+
+      h1 {
+        font-size: 21px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="workspace">
+      <header class="topbar">
+        <div class="brand">
+          <h1>Coloring Game</h1>
+          <div class="sub">selfish improvement stepper</div>
+        </div>
+        <div class="controls">
+          <div class="mode-cluster">
+            <span class="mode-label">节点</span>
+            <div class="mode-toggle" aria-label="节点选择方式">
+              <button class="mode-btn node-mode-btn active" data-mode="forward" type="button">顺序</button>
+              <button class="mode-btn node-mode-btn" data-mode="reverse" type="button">倒序</button>
+              <button class="mode-btn node-mode-btn" data-mode="random" type="button">随机</button>
+            </div>
+            <span class="mode-label">颜色</span>
+            <div class="mode-toggle" aria-label="颜色选择方式">
+              <button class="mode-btn color-mode-btn active" data-mode="forward" type="button">顺序</button>
+              <button class="mode-btn color-mode-btn" data-mode="reverse" type="button">倒序</button>
+              <button class="mode-btn color-mode-btn" data-mode="random" type="button">随机</button>
+            </div>
+          </div>
+          <button class="btn primary" id="stepBtn">下一步</button>
+          <button class="btn" id="playBtn">自动播放</button>
+          <button class="btn warn" id="resetBtn">重置</button>
+        </div>
+      </header>
+
+      <div class="graph-wrap">
+        <svg id="graphSvg" viewBox="0 0 820 600" role="img" aria-label="coloring game graph"></svg>
+      </div>
+
+      <footer class="statusbar">
+        <div class="metric">
+          <div class="label">当前轮次</div>
+          <div class="value" id="roundMetric">1</div>
+        </div>
+        <div class="metric">
+          <div class="label">下一个顶点</div>
+          <div class="value" id="nextMetric">1</div>
+        </div>
+        <div class="metric">
+          <div class="label">使用颜色数</div>
+          <div class="value" id="colorMetric">7</div>
+        </div>
+        <div class="metric">
+          <div class="label">总得分</div>
+          <div class="value" id="scoreMetric">7</div>
+        </div>
+      </footer>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>图数据</h2>
+        <textarea id="edgeInput" spellcheck="false">1 2
+1 6
+1 7
+2 3
+2 7
+3 4
+3 7
+4 5
+4 6
+5 6
+6 7</textarea>
+        <div class="controls" style="justify-content:flex-start;margin-top:10px">
+          <button class="btn" id="loadBtn">加载图</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>顶点状态</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>顶点</th>
+              <th>颜色</th>
+              <th>得分</th>
+            </tr>
+          </thead>
+          <tbody id="nodeTable"></tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h2>步骤记录</h2>
+        <ul class="log" id="logList"></ul>
+      </section>
+    </aside>
+  </main>
+
+  <script>
+    const palette = [
+      "#146c70", "#b44b2a", "#d8a31d", "#3666a5", "#2e7d45",
+      "#8f4f8b", "#5d6d2f", "#c46a1a", "#297f8f", "#7a5935"
+    ];
+
+    let nodes = [];
+    let edges = [];
+    let colors = {};
+    let payoffs = {};
+    let sequence = [];
+    let stepIndex = 0;
+    let round = 1;
+    let changedThisRound = false;
+    let finished = false;
+    let lastChangedNode = null;
+    let timer = null;
+    let history = [];
+    let traverseMode = "forward";
+    let colorChoiceMode = "forward";
+
+    const svg = document.getElementById("graphSvg");
+    const edgeInput = document.getElementById("edgeInput");
+    const nodeTable = document.getElementById("nodeTable");
+    const logList = document.getElementById("logList");
+    const stepBtn = document.getElementById("stepBtn");
+    const playBtn = document.getElementById("playBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const loadBtn = document.getElementById("loadBtn");
+    const nodeModeButtons = Array.from(document.querySelectorAll(".node-mode-btn"));
+    const colorModeButtons = Array.from(document.querySelectorAll(".color-mode-btn"));
+
+    function parseEdgeList(text) {
+      const nodeSet = new Set();
+      const parsedEdges = [];
+      const seen = new Set();
+
+      text.split(/\r?\n/).forEach((line) => {
+        const clean = line.replace(/#.*/, "").trim();
+        if (!clean) return;
+        const parts = clean.split(/\s+/).map(Number);
+        if (parts.length < 2 || parts.some(Number.isNaN)) return;
+        const [a, b] = parts;
+        if (a === b) return;
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        nodeSet.add(a);
+        nodeSet.add(b);
+        parsedEdges.push([a, b]);
+      });
+
+      return {
+        nodes: Array.from(nodeSet).sort((a, b) => a - b),
+        edges: parsedEdges
+      };
+    }
+
+    function resetGame() {
+      const parsed = parseEdgeList(edgeInput.value);
+      nodes = parsed.nodes;
+      edges = parsed.edges;
+      colors = Object.fromEntries(nodes.map((node) => [node, node]));
+      sequence = makeIterationSequence();
+      stepIndex = 0;
+      round = 1;
+      changedThisRound = false;
+      finished = nodes.length === 0;
+      lastChangedNode = null;
+      history = [];
+      stopAutoPlay();
+      refreshPayoffs();
+      render();
+    }
+
+    function makeIterationSequence() {
+      const ordered = [...nodes].sort((a, b) => a - b);
+
+      if (traverseMode === "reverse") {
+        return ordered.reverse();
+      }
+
+      if (traverseMode === "random") {
+        return shuffle(ordered);
+      }
+
+      return ordered;
+    }
+
+    function makeColorSequence(randomize = true) {
+      const ordered = [...nodes].sort((a, b) => a - b);
+
+      if (colorChoiceMode === "reverse") {
+        return ordered.reverse();
+      }
+
+      if (colorChoiceMode === "random") {
+        return randomize ? shuffle(ordered) : ordered;
+      }
+
+      return ordered;
+    }
+
+    function shuffle(items) {
+      const result = [...items];
+      for (let i = result.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+      }
+      return result;
+    }
+
+    function neighborsOf(node) {
+      const result = [];
+      edges.forEach(([a, b]) => {
+        if (a === node) result.push(b);
+        if (b === node) result.push(a);
+      });
+      return result;
+    }
+
+    function payoffIf(node, color) {
+      if (neighborsOf(node).some((neighbor) => colors[neighbor] === color)) {
+        return 0;
+      }
+
+      return 1 + nodes.filter((other) => other !== node && colors[other] === color).length;
+    }
+
+    function refreshPayoffs() {
+      payoffs = Object.fromEntries(nodes.map((node) => [node, payoffIf(node, colors[node])]));
+    }
+
+    function findImprovement(node, randomize = true) {
+      const fromColor = colors[node];
+      const fromPayoff = payoffIf(node, fromColor);
+      let bestColor = fromColor;
+      let bestPayoff = fromPayoff;
+
+      for (const color of makeColorSequence(randomize)) {
+        if (color === fromColor) continue;
+        const toPayoff = payoffIf(node, color);
+        if (toPayoff > bestPayoff) {
+          bestColor = color;
+          bestPayoff = toPayoff;
+        }
+      }
+
+      if (bestPayoff > fromPayoff) {
+        return { node, fromColor, toColor: bestColor, fromPayoff, toPayoff: bestPayoff };
+      }
+
+      return null;
+    }
+
+    function takeStep() {
+      if (finished || nodes.length === 0) return;
+
+      const node = sequence[stepIndex];
+      const beforeColor = colors[node];
+      const beforePayoff = payoffIf(node, beforeColor);
+      const improvement = findImprovement(node);
+
+      if (improvement) {
+        colors[node] = improvement.toColor;
+        changedThisRound = true;
+        lastChangedNode = node;
+        history.unshift(
+          `第 ${round} 轮，顶点 ${node}: 颜色 ${improvement.fromColor} -> ${improvement.toColor}，得分 ${improvement.fromPayoff} -> ${improvement.toPayoff}`
+        );
+      } else {
+        lastChangedNode = null;
+        history.unshift(
+          `第 ${round} 轮，顶点 ${node}: 保持颜色 ${beforeColor}，得分 ${beforePayoff}`
+        );
+      }
+
+      refreshPayoffs();
+
+      if (isNashEquilibrium()) {
+        finished = true;
+        stopAutoPlay();
+        history.unshift(`第 ${round} 轮：Nash equilibrium`);
+      }
+
+      if (!finished) {
+        stepIndex += 1;
+      }
+
+      if (!finished && stepIndex >= sequence.length) {
+        if (changedThisRound) {
+          round += 1;
+          stepIndex = 0;
+          sequence = makeIterationSequence();
+          changedThisRound = false;
+        } else {
+          finished = true;
+          stopAutoPlay();
+          history.unshift(`第 ${round} 轮结束：Nash equilibrium`);
+        }
+      }
+
+      render();
+    }
+
+    function usedColors() {
+      return Array.from(new Set(nodes.map((node) => colors[node]))).sort((a, b) => a - b);
+    }
+
+    function isValidColoring() {
+      return edges.every(([a, b]) => colors[a] !== colors[b]);
+    }
+
+    function isNashEquilibrium() {
+      return nodes.every((node) => findImprovement(node, false) === null);
+    }
+
+    function colorFor(color) {
+      const idx = nodes.indexOf(color);
+      return palette[(idx < 0 ? color : idx) % palette.length];
+    }
+
+    function renderGraph() {
+      svg.replaceChildren();
+      if (!nodes.length) return;
+
+      const centerX = 410;
+      const centerY = 300;
+      const radius = nodes.length <= 2 ? 150 : 220;
+      const positions = {};
+
+      nodes.forEach((node, index) => {
+        const angle = -Math.PI / 2 + (index * 2 * Math.PI) / nodes.length;
+        positions[node] = {
+          x: centerX + radius * Math.cos(angle),
+          y: centerY + radius * Math.sin(angle)
+        };
+      });
+
+      edges.forEach(([a, b]) => {
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("class", "edge");
+        line.setAttribute("x1", positions[a].x);
+        line.setAttribute("y1", positions[a].y);
+        line.setAttribute("x2", positions[b].x);
+        line.setAttribute("y2", positions[b].y);
+        svg.appendChild(line);
+      });
+
+      const nextNode = finished ? null : sequence[stepIndex];
+      nodes.forEach((node) => {
+        const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        const meta = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        const { x, y } = positions[node];
+
+        circle.setAttribute("cx", x);
+        circle.setAttribute("cy", y);
+        circle.setAttribute("r", 34);
+        circle.setAttribute(
+          "class",
+          `node-ring${node === nextNode ? " next" : ""}${node === lastChangedNode ? " changed" : ""}`
+        );
+        circle.setAttribute("fill", colorFor(colors[node]));
+
+        label.setAttribute("class", "node-text");
+        label.setAttribute("x", x);
+        label.setAttribute("y", y + 6);
+        label.setAttribute("text-anchor", "middle");
+        label.textContent = node;
+
+        meta.setAttribute("class", "node-meta");
+        meta.setAttribute("x", x);
+        meta.setAttribute("y", y + 55);
+        meta.setAttribute("text-anchor", "middle");
+        meta.textContent = `c${colors[node]} / p${payoffs[node]}`;
+
+        group.appendChild(circle);
+        group.appendChild(label);
+        group.appendChild(meta);
+        svg.appendChild(group);
+      });
+    }
+
+    function renderTable() {
+      const nextNode = finished ? null : sequence[stepIndex];
+      nodeTable.replaceChildren();
+
+      nodes.forEach((node) => {
+        const row = document.createElement("tr");
+        if (node === nextNode) row.className = "next-row";
+        row.innerHTML = `
+          <td>${node}</td>
+          <td><span class="swatch" style="background:${colorFor(colors[node])}"></span>${colors[node]}</td>
+          <td>${payoffs[node]}</td>
+        `;
+        nodeTable.appendChild(row);
+      });
+    }
+
+    function renderHistory() {
+      logList.replaceChildren();
+      const items = history.slice(0, 12);
+      if (!items.length) {
+        const item = document.createElement("li");
+        item.textContent = "初始状态：每个顶点使用自己的颜色";
+        logList.appendChild(item);
+        return;
+      }
+
+      items.forEach((entry) => {
+        const item = document.createElement("li");
+        item.textContent = entry;
+        logList.appendChild(item);
+      });
+    }
+
+    function renderMetrics() {
+      document.getElementById("roundMetric").textContent = round;
+      document.getElementById("nextMetric").textContent = finished ? "完成" : sequence[stepIndex];
+      document.getElementById("colorMetric").innerHTML = `${usedColors().length}<span class="tag ${isValidColoring() ? "ok" : "bad"}">${isValidColoring() ? "proper" : "conflict"}</span>`;
+      document.getElementById("scoreMetric").textContent = nodes.reduce((sum, node) => sum + payoffs[node], 0);
+      stepBtn.disabled = finished || nodes.length === 0;
+    }
+
+    function render() {
+      renderGraph();
+      renderTable();
+      renderHistory();
+      renderMetrics();
+    }
+
+    function startAutoPlay() {
+      if (timer || finished) return;
+      playBtn.textContent = "暂停";
+      timer = window.setInterval(takeStep, 750);
+    }
+
+    function stopAutoPlay() {
+      if (timer) window.clearInterval(timer);
+      timer = null;
+      playBtn.textContent = "自动播放";
+    }
+
+    stepBtn.addEventListener("click", takeStep);
+    resetBtn.addEventListener("click", resetGame);
+    loadBtn.addEventListener("click", resetGame);
+    nodeModeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        traverseMode = button.dataset.mode;
+        nodeModeButtons.forEach((item) => item.classList.toggle("active", item === button));
+        resetGame();
+      });
+    });
+    colorModeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        colorChoiceMode = button.dataset.mode;
+        colorModeButtons.forEach((item) => item.classList.toggle("active", item === button));
+        resetGame();
+      });
+    });
+    playBtn.addEventListener("click", () => {
+      if (timer) {
+        stopAutoPlay();
+      } else {
+        startAutoPlay();
+      }
+    });
+
+    resetGame();
+  </script>
+</body>
+</html>

@@ -40,8 +40,10 @@ class coloring_game:
         self.color_mode = 1
         self.node_mode = node_mode
         self.traverse_mode = "forward"
+        self.color_choice_mode = "forward"
         self.random_seed = random_seed
         self._traverse_rng = random.Random(random_seed)
+        self._color_rng = random.Random(random_seed)
 
         self.node_ids: List[int] = []
         self.available_colors: List[int] = []
@@ -124,23 +126,46 @@ class coloring_game:
     def have_same_color_with_neighbours(self, node_id: int, color_id: int) -> bool:
         return any(self.node_color.get(neighbor) == color_id for neighbor in self.get_neighbors(node_id))
 
-    def find_self_improvement(self, node_id: int) -> Optional[Dict[str, int]]:
+    def get_color_sequence(self, randomize: bool = True) -> List[int]:
+        colors = sorted(self.available_colors)
+
+        if self.color_choice_mode == "forward":
+            return colors
+
+        if self.color_choice_mode == "reverse":
+            return list(reversed(colors))
+
+        if self.color_choice_mode == "random":
+            shuffled = list(colors)
+            if randomize:
+                self._color_rng.shuffle(shuffled)
+            return shuffled
+
+        raise ValueError(f"Color choice mode {self.color_choice_mode} is not supported.")
+
+    def find_self_improvement(self, node_id: int, randomize: bool = True) -> Optional[Dict[str, int]]:
         original_color = self.node_color[node_id]
         current_payoff = self.get_payoff(node_id)
+        best_color = original_color
+        best_payoff = current_payoff
 
-        for new_color in sorted(self.available_colors):
+        for new_color in self.get_color_sequence(randomize=randomize):
             if new_color == original_color:
                 continue
 
             new_payoff = self.get_payoff_if(node_id, new_color)
-            if new_payoff > current_payoff:
-                return {
-                    "node": node_id,
-                    "from_color": original_color,
-                    "to_color": new_color,
-                    "from_payoff": current_payoff,
-                    "to_payoff": new_payoff,
-                }
+            if new_payoff > best_payoff:
+                best_color = new_color
+                best_payoff = new_payoff
+
+        if best_payoff > current_payoff:
+            return {
+                "node": node_id,
+                "from_color": original_color,
+                "to_color": best_color,
+                "from_payoff": current_payoff,
+                "to_payoff": best_payoff,
+            }
 
         return None
 
@@ -157,12 +182,20 @@ class coloring_game:
     def set_node_mode(self, node_mode: int = 0, random_seed: int = 42) -> None:
         self.node_mode = node_mode
         self.random_seed = random_seed
+        self._traverse_rng = random.Random(random_seed)
+        self._color_rng = random.Random(random_seed)
         self.reset_stepper()
 
     def set_traverse_mode(self, traverse_mode: str = "forward") -> None:
         if traverse_mode not in {"forward", "reverse", "random"}:
             raise ValueError("traverse_mode must be one of: forward, reverse, random.")
         self.traverse_mode = traverse_mode
+        self.reset_stepper()
+
+    def set_color_choice_mode(self, color_choice_mode: str = "forward") -> None:
+        if color_choice_mode not in {"forward", "reverse", "random"}:
+            raise ValueError("color_choice_mode must be one of: forward, reverse, random.")
+        self.color_choice_mode = color_choice_mode
         self.reset_stepper()
 
     def get_iteration_sequence(self) -> List[int]:
@@ -239,6 +272,7 @@ class coloring_game:
             return
 
         self._traverse_rng = random.Random(self.random_seed)
+        self._color_rng = random.Random(self.random_seed)
         self._step_sequence = self.get_iteration_sequence()
         self._step_index = 0
         self._step_round = 1
@@ -306,6 +340,7 @@ class coloring_game:
 
     def move_to_nash_equilibrium(self) -> None:
         self._traverse_rng = random.Random(self.random_seed)
+        self._color_rng = random.Random(self.random_seed)
         iterations = 0
 
         while True:
@@ -330,7 +365,10 @@ class coloring_game:
         return True
 
     def is_nash_equilibrium(self) -> bool:
-        return all(self.find_self_improvement(node_id) is None for node_id in self.node_ids)
+        return all(
+            self.find_self_improvement(node_id, randomize=False) is None
+            for node_id in self.node_ids
+        )
 
     def used_colors(self) -> List[int]:
         return sorted(set(self.node_color.values()))
@@ -349,6 +387,8 @@ class coloring_game:
             "total_payoff": sum(self.current_payoff.values()),
             "valid_coloring": self.is_valid_coloring(),
             "nash_equilibrium": self.is_nash_equilibrium(),
+            "traverse_mode": self.traverse_mode,
+            "color_choice_mode": self.color_choice_mode,
         }
 
     def print_result(self) -> None:
