@@ -39,7 +39,7 @@ class coloring_game:
         self.edge_prob = edge_prob
         self.color_mode = 1
         self.node_mode = node_mode
-        self.traverse_mode = "forward"
+        self.traverse_mode = "forward" # forward reverse random
         self.color_choice_mode = "forward"
         self.random_seed = random_seed
         self._traverse_rng = random.Random(random_seed)
@@ -76,7 +76,8 @@ class coloring_game:
             self.available_colors = list(self.node_ids)
 
         if color_mode == 0:
-            self.node_color = {node_id: 0 for node_id in self.node_ids}
+            # self.node_color = {node_id: 0 for node_id in self.node_ids}
+            raise ValueError("无效参数 和论文描述不符合")
         else:
             self.node_color = {node_id: node_id for node_id in self.node_ids}
 
