@@ -35,7 +35,7 @@ class TabuCol:
         random_seed: int = 42,
         max_iterations: int = 10000,
         max_restarts: int = 20,
-        tabu_tenure_base: int = 7,
+        tabu_tenure_base: int = 10,
         tabu_tenure_alpha: float = 0.6,
     ):
         self.graph = snap.GenRndGnm(
@@ -62,6 +62,10 @@ class TabuCol:
         self.best_coloring: Dict[int, int] = {}
         self.best_color_count: int = 0
         self.best_conflicts: int = 10**9
+        self.last_run_best_coloring: Dict[int, int] = {}
+        self.last_run_best_conflicts: int = 10**9
+        self.last_fixed_k_best_coloring: Dict[int, int] = {}
+        self.last_failure_conflicts: int = 0
 
         self._rebuild_state()
 
@@ -86,6 +90,10 @@ class TabuCol:
         self.best_coloring = {}
         self.best_color_count = 0
         self.best_conflicts = self.count_conflicting_edges(self.node_color)
+        self.last_run_best_coloring = {}
+        self.last_run_best_conflicts = 10**9
+        self.last_fixed_k_best_coloring = {}
+        self.last_failure_conflicts = 0
 
     def get_neighbors(self, node_id: int) -> List[int]:
         if node_id not in self.adj:
@@ -99,7 +107,105 @@ class TabuCol:
             for node_id in self.node_ids
         }
 
-    def _initial_coloring(self, color_count: int) -> Dict[int, int]:
+    def _dsatur_coloring(self) -> Dict[int, int]:
+        """Build a deterministic feasible coloring to obtain an upper bound."""
+        coloring: Dict[int, int] = {}
+        uncolored = set(self.node_ids)
+
+        while uncolored:
+            node_id = max(
+                uncolored,
+                key=lambda candidate: (
+                    len({
+                        coloring[neighbor]
+                        for neighbor in self.adj[candidate]
+                        if neighbor in coloring
+                    }),
+                    len(self.adj[candidate]),
+                    -candidate,
+                ),
+            )
+            forbidden_colors = {
+                coloring[neighbor]
+                for neighbor in self.adj[node_id]
+                if neighbor in coloring
+            }
+            color_id = 1
+            while color_id in forbidden_colors:
+                color_id += 1
+
+            coloring[node_id] = color_id
+            uncolored.remove(node_id)
+
+        return self._compact_coloring(coloring)
+
+    def _reduce_coloring(
+        self,
+        coloring: Dict[int, int],
+        target_color_count: int,
+    ) -> Dict[int, int]:
+        """Construct a warm start by removing color classes from a feasible coloring."""
+        if target_color_count <= 0:
+            raise ValueError("target_color_count must be positive.")
+        if set(coloring) != set(self.node_ids):
+            raise ValueError("coloring must assign every graph vertex.")
+
+        reduced = self._compact_coloring(coloring)
+        while len(set(reduced.values())) > target_color_count:
+            color_classes: Dict[int, List[int]] = {}
+            for node_id, color_id in reduced.items():
+                color_classes.setdefault(color_id, []).append(node_id)
+
+            removed_color = min(
+                color_classes,
+                key=lambda color_id: (len(color_classes[color_id]), color_id),
+            )
+            remaining_colors = sorted(
+                color_id for color_id in color_classes if color_id != removed_color
+            )
+            removed_vertices = sorted(
+                color_classes[removed_color],
+                key=lambda node_id: (-len(self.adj[node_id]), node_id),
+            )
+
+            for node_id in removed_vertices:
+                conflict_by_color = {
+                    color_id: sum(
+                        1
+                        for neighbor in self.adj[node_id]
+                        if reduced[neighbor] == color_id
+                    )
+                    for color_id in remaining_colors
+                }
+                minimum_conflicts = min(conflict_by_color.values())
+                best_colors = [
+                    color_id
+                    for color_id, conflicts in conflict_by_color.items()
+                    if conflicts == minimum_conflicts
+                ]
+                reduced[node_id] = self.rng.choice(best_colors)
+
+            reduced = self._compact_coloring(reduced)
+
+        return reduced
+
+    def _initial_coloring(
+        self,
+        color_count: int,
+        initial_coloring: Optional[Dict[int, int]] = None,
+    ) -> Dict[int, int]:
+        if initial_coloring is not None:
+            if set(initial_coloring) != set(self.node_ids):
+                raise ValueError("initial_coloring must assign every graph vertex.")
+            if any(
+                color_id < 1 or color_id > color_count
+                for color_id in initial_coloring.values()
+            ):
+                raise ValueError(
+                    "initial_coloring colors must be between 1 and color_count."
+                )
+            return dict(initial_coloring)
+
         if color_count >= self.node_num:
             return {
                 node_id: index + 1
@@ -108,7 +214,8 @@ class TabuCol:
         return self._random_coloring(color_count)
 
     def count_conflicting_edges(self, coloring: Optional[Dict[int, int]] = None) -> int:
-        coloring = coloring or self.node_color
+        if coloring is None:
+            coloring = self.node_color
         return sum(1 for u, v in self.edges if coloring.get(u) == coloring.get(v))
 
     def _conflicting_vertices(self, coloring: Dict[int, int]) -> Set[int]:
@@ -119,8 +226,45 @@ class TabuCol:
                 conflicting.add(v)
         return conflicting
 
-    def _move_delta(self, coloring: Dict[int, int], node_id: int, new_color: int) -> int:
+    def _build_conflict_state(
+        self,
+        coloring: Dict[int, int],
+        color_count: int,
+    ) -> Tuple[Dict[int, List[int]], Set[int], int]:
+        """Build Gamma[v][c], the conflict set, and the total conflict count."""
+        conflict_table = {
+            node_id: [0] * (color_count + 1)
+            for node_id in self.node_ids
+        }
+        for u, v in self.edges:
+            conflict_table[u][coloring[v]] += 1
+            conflict_table[v][coloring[u]] += 1
+
+        conflicting_vertices = {
+            node_id
+            for node_id in self.node_ids
+            if conflict_table[node_id][coloring[node_id]] > 0
+        }
+        conflict_count = sum(
+            conflict_table[node_id][coloring[node_id]]
+            for node_id in self.node_ids
+        ) // 2
+        return conflict_table, conflicting_vertices, conflict_count
+
+    def _move_delta(
+        self,
+        coloring: Dict[int, int],
+        node_id: int,
+        new_color: int,
+        conflict_table: Optional[Dict[int, List[int]]] = None,
+    ) -> int:
         old_color = coloring[node_id]
+        if conflict_table is not None:
+            return (
+                conflict_table[node_id][new_color]
+                - conflict_table[node_id][old_color]
+            )
+
         old_conflicts = 0
         new_conflicts = 0
 
@@ -133,9 +277,50 @@ class TabuCol:
 
         return new_conflicts - old_conflicts
 
-    def _tabu_tenure(self, conflict_count: int) -> int:
-        dynamic_part = int(self.tabu_tenure_alpha * conflict_count)
-        return dynamic_part + self.rng.randint(0, self.tabu_tenure_base)
+    def _apply_move(
+        self,
+        coloring: Dict[int, int],
+        conflict_table: Dict[int, List[int]],
+        conflicting_vertices: Set[int],
+        node_id: int,
+        new_color: int,
+    ) -> int:
+        """Apply one recoloring and incrementally update all conflict state."""
+        old_color = coloring[node_id]
+        delta = self._move_delta(
+            coloring,
+            node_id,
+            new_color,
+            conflict_table=conflict_table,
+        )
+        coloring[node_id] = new_color
+
+        for neighbor in self.adj[node_id]:
+            conflict_table[neighbor][old_color] -= 1
+            conflict_table[neighbor][new_color] += 1
+            if conflict_table[neighbor][coloring[neighbor]] > 0:
+                conflicting_vertices.add(neighbor)
+            else:
+                conflicting_vertices.discard(neighbor)
+
+        if conflict_table[node_id][new_color] > 0:
+            conflicting_vertices.add(node_id)
+        else:
+            conflicting_vertices.discard(node_id)
+
+        return delta
+
+    def _tabu_tenure(self, conflicting_vertex_count: int) -> int:
+        """Return Random(A) + alpha * nbCFL from Galinier and Hao."""
+        random_part = (
+            self.rng.randrange(self.tabu_tenure_base)
+            if self.tabu_tenure_base > 0
+            else 0
+        )
+        dynamic_part = int(
+            self.tabu_tenure_alpha * conflicting_vertex_count
+        )
+        return max(1, random_part + dynamic_part)
 
     def _select_move(
         self,
@@ -143,27 +328,28 @@ class TabuCol:
         color_count: int,
         conflict_count: int,
         best_conflicts: int,
+        conflict_table: Dict[int, List[int]],
+        conflicting_vertices: Set[int],
         tabu_until: Dict[Tuple[int, int], int],
         iteration: int,
     ) -> Optional[Tuple[int, int, int]]:
-        conflicting_vertices = list(self._conflicting_vertices(coloring))
-        self.rng.shuffle(conflicting_vertices)
-
         best_moves: List[Tuple[int, int, int]] = []
         best_delta: Optional[int] = None
         fallback_moves: List[Tuple[int, int, int]] = []
         fallback_delta: Optional[int] = None
 
-        for node_id in conflicting_vertices:
+        for node_id in sorted(conflicting_vertices):
             old_color = coloring[node_id]
-            colors = list(range(1, color_count + 1))
-            self.rng.shuffle(colors)
-
-            for new_color in colors:
+            for new_color in range(1, color_count + 1):
                 if new_color == old_color:
                     continue
 
-                delta = self._move_delta(coloring, node_id, new_color)
+                delta = self._move_delta(
+                    coloring,
+                    node_id,
+                    new_color,
+                    conflict_table=conflict_table,
+                )
                 projected_conflicts = conflict_count + delta
                 is_tabu = tabu_until.get((node_id, new_color), 0) > iteration
                 aspiration = projected_conflicts < best_conflicts
@@ -195,6 +381,7 @@ class TabuCol:
         color_count: int,
         max_iterations: Optional[int] = None,
         verbose: bool = False,
+        initial_coloring: Optional[Dict[int, int]] = None,
     ) -> Tuple[Optional[Dict[int, int]], int]:
         """
         Run TabuCol for a fixed number of colors.
@@ -206,17 +393,31 @@ class TabuCol:
         if color_count <= 0:
             raise ValueError("color_count must be positive.")
         if not self.node_ids:
+            self.last_run_best_coloring = {}
+            self.last_run_best_conflicts = 0
             return {}, 0
 
-        max_iterations = max_iterations or self.max_iterations
-        coloring = self._initial_coloring(color_count)
-        conflict_count = self.count_conflicting_edges(coloring)
+        if max_iterations is None:
+            max_iterations = self.max_iterations
+        if max_iterations <= 0:
+            raise ValueError("max_iterations must be positive.")
+
+        coloring = self._initial_coloring(
+            color_count,
+            initial_coloring=initial_coloring,
+        )
+        conflict_table, conflicting_vertices, conflict_count = (
+            self._build_conflict_state(coloring, color_count)
+        )
         best_coloring = dict(coloring)
         best_conflicts = conflict_count
         tabu_until: Dict[Tuple[int, int], int] = {}
 
         if conflict_count == 0:
-            return self._compact_coloring(coloring), 0
+            feasible = self._compact_coloring(coloring)
+            self.last_run_best_coloring = dict(feasible)
+            self.last_run_best_conflicts = 0
+            return feasible, 0
 
         for iteration in range(1, max_iterations + 1):
             selected = self._select_move(
@@ -224,6 +425,8 @@ class TabuCol:
                 color_count=color_count,
                 conflict_count=conflict_count,
                 best_conflicts=best_conflicts,
+                conflict_table=conflict_table,
+                conflicting_vertices=conflicting_vertices,
                 tabu_until=tabu_until,
                 iteration=iteration,
             )
@@ -232,23 +435,39 @@ class TabuCol:
 
             node_id, new_color, delta = selected
             old_color = coloring[node_id]
-            coloring[node_id] = new_color
-            conflict_count += delta
-            tabu_until[(node_id, old_color)] = iteration + self._tabu_tenure(conflict_count)
+            applied_delta = self._apply_move(
+                coloring=coloring,
+                conflict_table=conflict_table,
+                conflicting_vertices=conflicting_vertices,
+                node_id=node_id,
+                new_color=new_color,
+            )
+            if applied_delta != delta:
+                raise RuntimeError("incremental conflict delta became inconsistent.")
+            conflict_count += applied_delta
+            tabu_until[(node_id, old_color)] = (
+                iteration + self._tabu_tenure(len(conflicting_vertices))
+            )
 
-            if conflict_count < best_conflicts:
+            improved = conflict_count < best_conflicts
+            if conflict_count <= best_conflicts:
                 best_conflicts = conflict_count
                 best_coloring = dict(coloring)
 
-                if verbose:
+                if verbose and improved:
                     print(
                         f"[k={color_count}] iteration={iteration}, "
                         f"best_conflicts={best_conflicts}"
                     )
 
                 if best_conflicts == 0:
-                    return self._compact_coloring(best_coloring), 0
+                    feasible = self._compact_coloring(best_coloring)
+                    self.last_run_best_coloring = dict(feasible)
+                    self.last_run_best_conflicts = 0
+                    return feasible, 0
 
+        self.last_run_best_coloring = dict(best_coloring)
+        self.last_run_best_conflicts = best_conflicts
         return None, best_conflicts
 
     def solve_fixed_k(
@@ -257,24 +476,35 @@ class TabuCol:
         max_iterations: Optional[int] = None,
         max_restarts: Optional[int] = None,
         verbose: bool = False,
+        initial_coloring: Optional[Dict[int, int]] = None,
     ) -> Tuple[Optional[Dict[int, int]], int]:
-        max_restarts = max_restarts or self.max_restarts
+        if max_restarts is None:
+            max_restarts = self.max_restarts
+        if max_restarts <= 0:
+            raise ValueError("max_restarts must be positive.")
+
         best_conflicts = 10**9
+        best_failed_coloring: Dict[int, int] = {}
 
         for restart in range(1, max_restarts + 1):
             coloring, conflicts = self.tabucol(
                 color_count=color_count,
                 max_iterations=max_iterations,
                 verbose=verbose,
+                initial_coloring=initial_coloring if restart == 1 else None,
             )
 
             if coloring is not None:
+                self.last_fixed_k_best_coloring = dict(coloring)
                 if verbose:
                     print(f"[k={color_count}] feasible coloring found at restart {restart}")
                 return coloring, 0
 
-            best_conflicts = min(best_conflicts, conflicts)
+            if conflicts <= best_conflicts:
+                best_conflicts = conflicts
+                best_failed_coloring = dict(self.last_run_best_coloring)
 
+        self.last_fixed_k_best_coloring = best_failed_coloring
         return None, best_conflicts
 
     def solve(
@@ -288,9 +518,10 @@ class TabuCol:
         """
         Search for a coloring with as few colors as TabuCol can find.
 
-        The search starts from max_colors, then tries one fewer color each
-        time. When TabuCol fails for k colors, the previous feasible coloring
-        is returned.
+        DSATUR first supplies a feasible upper bound. TabuCol then starts at
+        one fewer color and uses each feasible coloring to warm-start the next
+        fixed-k search. If TabuCol fails, the previous feasible coloring is
+        returned.
         """
         if min_colors <= 0:
             raise ValueError("min_colors must be positive.")
@@ -298,22 +529,30 @@ class TabuCol:
             self.node_color = {}
             return {}, 0
 
-        upper_bound = max_colors or self.node_num
+        if max_colors is not None and max_colors <= 0:
+            raise ValueError("max_colors must be positive.")
+        upper_bound = self.node_num if max_colors is None else max_colors
         upper_bound = min(upper_bound, self.node_num)
         if upper_bound < min_colors:
             raise ValueError("max_colors must be greater than or equal to min_colors.")
 
         self.rng = random.Random(self.random_seed)
-        best_coloring: Dict[int, int] = {}
-        best_color_count = 0
+        best_coloring = self._dsatur_coloring()
+        best_color_count = len(set(best_coloring.values()))
         last_failure_conflicts = 0
 
-        for color_count in range(upper_bound, min_colors - 1, -1):
+        if verbose:
+            print(f"[DSATUR] feasible upper bound={best_color_count}")
+
+        color_count = min(upper_bound, best_color_count - 1)
+        while color_count >= min_colors:
+            warm_start = self._reduce_coloring(best_coloring, color_count)
             coloring, conflicts = self.solve_fixed_k(
                 color_count=color_count,
                 max_iterations=max_iterations,
                 max_restarts=max_restarts,
                 verbose=verbose,
+                initial_coloring=warm_start,
             )
 
             if coloring is None:
@@ -329,20 +568,13 @@ class TabuCol:
             best_color_count = len(set(coloring.values()))
             if verbose:
                 print(f"[k={color_count}] accepted, used_colors={best_color_count}")
-
-        if not best_coloring:
-            fallback = self._compact_coloring({
-                node_id: index + 1
-                for index, node_id in enumerate(self.node_ids)
-            })
-            best_coloring = fallback
-            best_color_count = len(set(fallback.values()))
-            last_failure_conflicts = self.count_conflicting_edges(fallback)
+            color_count = best_color_count - 1
 
         self.node_color = dict(best_coloring)
         self.best_coloring = dict(best_coloring)
         self.best_color_count = best_color_count
-        self.best_conflicts = last_failure_conflicts
+        self.best_conflicts = 0
+        self.last_failure_conflicts = last_failure_conflicts
         return dict(best_coloring), best_color_count
 
     def color_graph(
