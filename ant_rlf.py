@@ -1,6 +1,6 @@
 """
-Ant-Ref graph coloring.
-
+Ant-Rlf graph coloring.
+不包含Tabu
 Idea:
 1. Build one color class at a time (RLF-style maximal independent set).
 2. While selecting the next vertex in the current color class, combine:
