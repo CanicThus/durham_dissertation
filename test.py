@@ -247,11 +247,11 @@ def run_coloring_game(ctx: RunContext) -> Dict[str, object]:
     }
 
 
-def run_ant_ref(ctx: RunContext) -> Dict[str, object]:
-    from ant_ref import Ant_Ref
+def run_ant_rlf(ctx: RunContext) -> Dict[str, object]:
+    from ant_rlf import AntRLF
 
     def execute() -> Tuple[Dict[int, int], int]:
-        agent = Ant_Ref(
+        agent = AntRLF(
             ants_per_iteration=ctx.args.ants_per_iteration,
             max_iterations=ctx.args.ant_iterations,
             random_seed=ctx.args.random_seed,
@@ -271,8 +271,13 @@ def run_ant_ref(ctx: RunContext) -> Dict[str, object]:
     }
 
 
+# Backwards compatibility for code that used the project's former
+# ``ant_ref`` spelling.
+run_ant_ref = run_ant_rlf
+
+
 def run_tabucol(ctx: RunContext) -> Dict[str, object]:
-    from tabucal import TabuCol
+    from tabucol import TabuCol
     from dsatur import DSATUR
 
     def execute() -> Tuple[Dict[int, int], int]:
@@ -331,8 +336,8 @@ def run_dsatur(ctx: RunContext) -> Dict[str, object]:
 
 def get_algorithm_registry() -> Dict[str, AlgorithmSpec]:
     return {
-        "coloring_game": AlgorithmSpec("coloring_game", run_coloring_game),
-        "ant_ref": AlgorithmSpec("ant_ref", run_ant_ref),
+        # "coloring_game": AlgorithmSpec("coloring_game", run_coloring_game),
+        "ant_rlf": AlgorithmSpec("ant_rlf", run_ant_rlf),
         "tabucol": AlgorithmSpec("tabucol", run_tabucol),
         "dsatur": AlgorithmSpec("dsatur", run_dsatur),
     }
@@ -515,8 +520,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force-download", action="store_true")
     parser.add_argument("--force-rebuild", action="store_true")
     parser.add_argument("--random-seed", type=int, default=42)
-    parser.add_argument("--ant-iterations", type=int, default=20)
-    parser.add_argument("--ants-per-iteration", type=int, default=10)
+    parser.add_argument(
+        "--ant-rlf-iterations",
+        "--ant-iterations",
+        dest="ant_iterations",
+        type=int,
+        default=20,
+        help="Number of ANT-RLF pheromone-update iterations.",
+    )
+    parser.add_argument(
+        "--ant-rlf-ants",
+        "--ants-per-iteration",
+        dest="ants_per_iteration",
+        type=int,
+        default=10,
+        help="Number of complete ANT-RLF constructions per iteration.",
+    )
     parser.add_argument("--tabu-iterations", type=int, default=2000)
     parser.add_argument("--tabu-restarts", type=int, default=5)
     parser.add_argument("--max-colors", type=int, default=None)
