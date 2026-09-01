@@ -336,7 +336,7 @@ def run_dsatur(ctx: RunContext) -> Dict[str, object]:
 
 def get_algorithm_registry() -> Dict[str, AlgorithmSpec]:
     return {
-        # "coloring_game": AlgorithmSpec("coloring_game", run_coloring_game),
+        "coloring_game": AlgorithmSpec("coloring_game", run_coloring_game),
         "ant_rlf": AlgorithmSpec("ant_rlf", run_ant_rlf),
         "tabucol": AlgorithmSpec("tabucol", run_tabucol),
         "dsatur": AlgorithmSpec("dsatur", run_dsatur),
