@@ -44,8 +44,8 @@ DEFAULT_RESULT_PATH = Path("result") / "random_coloring_benchmark_results.json"
 DEFAULT_PLOT_DIR = Path("result") / "random_plots"
 DEFAULT_GRAPH_COUNT = 10
 DEFAULT_EDGE_PROBABILITIES = (0.1,)
-MIN_RANDOM_NODES = 1
-MAX_RANDOM_NODES = 200
+MIN_RANDOM_NODES = 50
+MAX_RANDOM_NODES = 500
 
 # snap.TRnd(0) is not reproducible and the largest signed-int seed can make
 # GenRndGnm degenerate.  Keep graph seeds inside the tested safe interval.
