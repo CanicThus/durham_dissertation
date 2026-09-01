@@ -1,21 +1,15 @@
-"""Benchmark the three mode families in ``coloringGame.py``.
+"""Benchmark traversal and color-choice modes in ``coloringGame.py``.
 
 Like ``test.py``, this script prepares Stanford SNAP datasets, records JSON
 results, and can generate execution-time and color-count plots.  It also uses
 SNAP to generate reproducible G(n,m) random graphs under ``out/generated``.
-For every selected or generated graph it runs the same nine
+For every selected or generated graph it runs the same six
 one-factor-at-a-time mode cases.  In every group, only the named mode is
-varied and the other two modes keep their defaults.  The all-default
+varied and the other tested mode keeps its default.  The all-default
 configuration intentionally appears once per group.
 
 Mode meanings
 -------------
-``node_mode`` (default: 0)
-    0 selects the node with the smallest ID, 1 selects the node with the
-    largest ID, and 2 selects a node pseudo-randomly using ``random_seed``.
-    The current implementation treats every value other than 0 and 1 as the
-    random branch; this test uses 2 as its canonical name.
-
 ``traverse_mode`` (default: ``"forward"``)
     Controls the order in which nodes are visited in each improvement round:
     ascending node ID (forward), descending node ID (reverse), or a seeded
@@ -28,11 +22,6 @@ Mode meanings
     strict payoff improvement, this order breaks ties between equally good
     colors; it is not a first-improvement policy.
 
-Important implementation detail: ``node_mode`` currently affects only
-``get_one_node()``.  ``move_to_nash_equilibrium()`` visits nodes through
-``traverse_mode`` and does not call ``get_one_node()``.  Therefore the three
-node-mode cases validate and record the selected node, but their final
-colorings can be identical.
 """
 
 from __future__ import annotations
@@ -72,7 +61,6 @@ DEFAULT_GENERATED_GRAPH_COUNT = 10
 DEFAULT_GENERATED_NODE_COUNT = 50
 DEFAULT_GENERATED_EDGE_PROBABILITY = 0.1
 DEFAULT_GENERATED_GRAPH_SEED = 42
-DEFAULT_NODE_MODE = 0
 DEFAULT_TRAVERSE_MODE = "forward"
 DEFAULT_COLOR_CHOICE_MODE = "forward"
 
@@ -85,12 +73,11 @@ SNAP_SEED_COUNT = MAX_SNAP_SEED - MIN_SNAP_SEED + 1
 
 @dataclass(frozen=True)
 class ModeCase:
-    """One isolated mode experiment; the two non-target modes stay default."""
+    """One isolated experiment; the non-target tested mode stays default."""
 
     case_id: str
     changed_mode: str
     description: str
-    node_mode: int = DEFAULT_NODE_MODE
     traverse_mode: str = DEFAULT_TRAVERSE_MODE
     color_choice_mode: str = DEFAULT_COLOR_CHOICE_MODE
 
@@ -130,24 +117,6 @@ class GeneratedGraphSpec:
 
 
 MODE_CASES: Sequence[ModeCase] = (
-    ModeCase(
-        case_id="node_mode_0",
-        changed_mode="node_mode",
-        node_mode=0,
-        description="Select the node with the smallest node ID.",
-    ),
-    ModeCase(
-        case_id="node_mode_1",
-        changed_mode="node_mode",
-        node_mode=1,
-        description="Select the node with the largest node ID.",
-    ),
-    ModeCase(
-        case_id="node_mode_2",
-        changed_mode="node_mode",
-        node_mode=2,
-        description="Select one node pseudo-randomly using random_seed.",
-    ),
     ModeCase(
         case_id="traverse_mode_forward",
         changed_mode="traverse_mode",
@@ -340,13 +309,12 @@ def complete_generated_graph(
 
 
 def validate_mode_cases(cases: Sequence[ModeCase] = MODE_CASES) -> None:
-    """Guard the requested nine-case, one-factor-at-a-time test design."""
+    """Guard the requested six-case, one-factor-at-a-time test design."""
 
-    if len(cases) != 9:
-        raise ValueError(f"Exactly 9 mode cases are required; got {len(cases)}.")
+    if len(cases) != 6:
+        raise ValueError(f"Exactly 6 mode cases are required; got {len(cases)}.")
 
     expected_groups = {
-        "node_mode": 3,
         "traverse_mode": 3,
         "color_choice_mode": 3,
     }
@@ -356,12 +324,10 @@ def validate_mode_cases(cases: Sequence[ModeCase] = MODE_CASES) -> None:
     }
     if actual_groups != expected_groups:
         raise ValueError(
-            f"Each mode must have exactly 3 cases; got {actual_groups}."
+            f"Each tested mode must have exactly 3 cases; got {actual_groups}."
         )
 
     for case in cases:
-        if case.changed_mode != "node_mode" and case.node_mode != DEFAULT_NODE_MODE:
-            raise ValueError(f"{case.case_id}: node_mode must keep its default.")
         if (
             case.changed_mode != "traverse_mode"
             and case.traverse_mode != DEFAULT_TRAVERSE_MODE
@@ -378,14 +344,11 @@ def validate_mode_cases(cases: Sequence[ModeCase] = MODE_CASES) -> None:
 
 def print_mode_explanation() -> None:
     print("Mode meanings:")
-    print("  node_mode (default 0):")
-    print("    0 = smallest node ID; 1 = largest node ID; 2 = seeded random node.")
-    print("    It currently controls get_one_node(), not the equilibrium traversal.")
     print("  traverse_mode (default 'forward'):")
     print("    forward = ascending IDs; reverse = descending IDs; random = seeded shuffle.")
     print("  color_choice_mode (default 'forward'):")
     print("    forward/reverse/random control candidate-color order and payoff tie-breaking.")
-    print("Test design: 3 node + 3 traversal + 3 color-choice cases = 9 cases.")
+    print("Test design: 3 traversal + 3 color-choice cases = 6 cases.")
     print(
         "Generated graph defaults: "
         f"{DEFAULT_GENERATED_GRAPH_COUNT} SNAP G(n,m) graphs, "
@@ -412,7 +375,6 @@ def _new_agent(case: ModeCase, graph_path: Path, random_seed: int, verbose: bool
         try:
             with _output_context(verbose):
                 agent = coloring_game_module.coloring_game(
-                    node_mode=case.node_mode,
                     random_seed=random_seed,
                 )
         finally:
@@ -435,18 +397,9 @@ def _new_agent(case: ModeCase, graph_path: Path, random_seed: int, verbose: bool
 
     # Configure traversal last: reset_stepper() then stores the first seeded
     # traversal (including the first random shuffle) in _step_sequence.
-    agent.set_node_mode(case.node_mode, random_seed=random_seed)
     agent.set_color_choice_mode(case.color_choice_mode)
     agent.set_traverse_mode(case.traverse_mode)
     return agent
-
-
-def _expected_node(node_ids: List[int], node_mode: int, random_seed: int) -> int:
-    if node_mode == 0:
-        return min(node_ids)
-    if node_mode == 1:
-        return max(node_ids)
-    return random.Random(random_seed).choice(node_ids)
 
 
 def _expected_sequence(values: List[int], mode: str, random_seed: int) -> List[int]:
@@ -471,12 +424,10 @@ def run_mode_case(
     agent = _new_agent(case, graph_path, random_seed, verbose)
 
     node_ids = list(agent.node_ids)
-    selected_node = agent.get_one_node().GetId()
     # reset_stepper() has already saved the first traversal in this sequence.
     traverse_sequence = list(agent._step_sequence)
     color_choice_sequence = agent.get_color_sequence()
 
-    expected_node = _expected_node(node_ids, case.node_mode, random_seed)
     expected_traverse = _expected_sequence(
         node_ids, case.traverse_mode, random_seed
     )
@@ -484,10 +435,6 @@ def run_mode_case(
         list(agent.available_colors), case.color_choice_mode, random_seed
     )
 
-    if selected_node != expected_node:
-        raise AssertionError(
-            f"{case.case_id}: selected node {selected_node}, expected {expected_node}."
-        )
     if traverse_sequence != expected_traverse:
         raise AssertionError(
             f"{case.case_id}: traversal {traverse_sequence}, "
@@ -521,11 +468,7 @@ def run_mode_case(
     return {
         **asdict(case),
         "status": "ok",
-        "node_mode": case.node_mode,
-        "traverse_mode": case.traverse_mode,
-        "color_choice_mode": case.color_choice_mode,
         "random_seed": random_seed,
-        "selected_node": selected_node,
         "traverse_sequence": traverse_sequence,
         "color_choice_sequence": color_choice_sequence,
         "execution_time_sec": round(execution_time, 6),
@@ -548,7 +491,7 @@ def run_mode_cases_for_graph(
     random_seed: int,
     expected_node_count: Optional[int] = None,
 ) -> None:
-    """Run the fixed nine mode cases and append them to one graph report."""
+    """Run the fixed six mode cases and append them to one graph report."""
 
     print(
         f"Graph {graph_report['dataset']}: source={graph_report['source_type']}, "
@@ -557,7 +500,7 @@ def run_mode_cases_for_graph(
     )
     for index, case in enumerate(MODE_CASES, start=1):
         print(
-            f"  [{index}/9] {case.case_id}: node={case.node_mode}, "
+            f"  [{index}/{len(MODE_CASES)}] {case.case_id}: "
             f"traverse={case.traverse_mode}, "
             f"color_choice={case.color_choice_mode}"
         )
@@ -589,7 +532,6 @@ def run_mode_cases_for_graph(
         else:
             print(
                 f"    status=ok, time={result['execution_time_sec']}s, "
-                f"selected_node={result['selected_node']}, "
                 f"colors={result['color_count']}, "
                 f"valid={result['valid_coloring']}, "
                 f"nash={result['nash_equilibrium']}"
@@ -610,8 +552,6 @@ def run_mode_cases_for_graph(
 
 def _case_plot_label(result: Dict[str, object]) -> str:
     changed_mode = str(result["changed_mode"])
-    if changed_mode == "node_mode":
-        return f"node:{result['node_mode']}"
     if changed_mode == "traverse_mode":
         return f"traverse:{result['traverse_mode']}"
     return f"color:{result['color_choice_mode']}"
@@ -716,7 +656,7 @@ def parse_args() -> argparse.Namespace:
     dataset_registry = get_dataset_registry()
     parser = argparse.ArgumentParser(
         description=(
-            "Run 9 one-factor-at-a-time coloring-game mode tests on SNAP "
+            "Run 6 one-factor-at-a-time coloring-game mode tests on SNAP "
             "datasets and generated random graphs."
         )
     )
@@ -796,7 +736,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--describe-only",
         action="store_true",
-        help="Print mode meanings and the nine cases without running them.",
+        help="Print mode meanings and the six cases without running them.",
     )
     return parser.parse_args()
 
@@ -809,8 +749,7 @@ def main() -> None:
     if args.describe_only:
         for index, case in enumerate(MODE_CASES, start=1):
             print(
-                f"  {index}. {case.case_id}: node={case.node_mode}, "
-                f"traverse={case.traverse_mode}, "
+                f"  {index}. {case.case_id}: traverse={case.traverse_mode}, "
                 f"color_choice={case.color_choice_mode}"
             )
         return
@@ -862,17 +801,11 @@ def main() -> None:
             "base_graph_seed": args.generated_graph_seed,
         },
         "defaults": {
-            "node_mode": DEFAULT_NODE_MODE,
             "traverse_mode": DEFAULT_TRAVERSE_MODE,
             "color_choice_mode": DEFAULT_COLOR_CHOICE_MODE,
         },
         "test_design": (
-            "One factor at a time: 3 node + 3 traversal + "
-            "3 color-choice cases."
-        ),
-        "node_mode_scope": (
-            "Currently affects get_one_node() only; the equilibrium loop is "
-            "controlled by traverse_mode."
+            "One factor at a time: 3 traversal + 3 color-choice cases."
         ),
         "case_count_per_dataset": len(MODE_CASES),
         "case_count_per_graph": len(MODE_CASES),

@@ -23,7 +23,6 @@ class coloring_game:
         self,
         node_num: int = 5,
         edge_prob: float = 0.5,
-        node_mode: int = 0,
         random_seed: int = 42,
     ):
         self.template_graph_path = TEMPLATE_GRAPH_PATH
@@ -38,7 +37,6 @@ class coloring_game:
         self.node_num = node_num
         self.edge_prob = edge_prob
         self.color_mode = 1
-        self.node_mode = node_mode
         self.traverse_mode = "forward" # forward reverse random
         self.color_choice_mode = "forward"
         self.random_seed = random_seed
@@ -83,15 +81,6 @@ class coloring_game:
 
         self.refresh_payoffs()
         self.reset_stepper()
-
-    def get_one_node(self):
-        if not self.node_ids:
-            raise RuntimeError("Graph has no nodes.")
-
-        if self.node_mode == 0:
-            return self.graph.GetNI(self.node_ids[0])
-        if self.node_mode == 1:
-            return self.graph.GetNI(self.node_ids[-1])
 
         rng = random.Random(self.random_seed)
         return self.graph.GetNI(rng.choice(self.node_ids))
@@ -179,13 +168,6 @@ class coloring_game:
         self.node_color[node_id] = improvement["to_color"]
         self.refresh_payoffs()
         return True
-
-    def set_node_mode(self, node_mode: int = 0, random_seed: int = 42) -> None:
-        self.node_mode = node_mode
-        self.random_seed = random_seed
-        self._traverse_rng = random.Random(random_seed)
-        self._color_rng = random.Random(random_seed)
-        self.reset_stepper()
 
     def set_traverse_mode(self, traverse_mode: str = "forward") -> None:
         if traverse_mode not in {"forward", "reverse", "random"}:
