@@ -132,9 +132,6 @@ class DSATUR:
         self.node_color = dict(sorted(coloring.items()))
         return dict(self.node_color), len(self.used_colors())
 
-    def color_graph(self, verbose: bool = False) -> Tuple[Dict[int, int], int]:
-        return self.solve(verbose=verbose)
-
     def count_conflicting_edges(self, coloring: Optional[Dict[int, int]] = None) -> int:
         coloring = coloring or self.node_color
         return sum(1 for u, v in self.edges if coloring.get(u) == coloring.get(v))
