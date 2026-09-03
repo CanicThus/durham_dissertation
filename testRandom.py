@@ -124,7 +124,6 @@ def build_graph_specs(args: argparse.Namespace) -> List[RandomGraphSpec]:
 
 
 def load_snap():
-    """Import SNAP lazily so ``--help`` works without SNAP installed."""
 
     try:
         return importlib.import_module("snap")
@@ -199,13 +198,6 @@ ALGORITHM_MODULES = {
 
 
 def run_default_coloring_game(ctx: RunContext) -> Dict[str, object]:
-    """Run ColoringGame with only its class defaults.
-
-    No constructor argument or mode setter is used.  In particular, the
-    algorithm always keeps ``node_mode=0``, forward traversal, forward color
-    choice, and ``random_seed=42`` even when ``--random-seed`` changes the
-    generated graph or the other randomized algorithms.
-    """
 
     from coloringGame import coloring_game
 

@@ -271,8 +271,6 @@ def run_ant_rlf(ctx: RunContext) -> Dict[str, object]:
     }
 
 
-# Backwards compatibility for code that used the project's former
-# ``ant_ref`` spelling.
 run_ant_ref = run_ant_rlf
 
 

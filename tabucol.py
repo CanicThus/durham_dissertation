@@ -375,13 +375,7 @@ class TabuCol:
         verbose: bool = False,
         initial_coloring: Optional[Dict[int, int]] = None,
     ) -> Tuple[Optional[Dict[int, int]], int]:
-        """
-        Run TabuCol for a fixed number of colors.
 
-        Returns a feasible coloring and 0 conflicts on success. If the search
-        does not find a feasible coloring, returns None and the best conflict
-        count reached by this run.
-        """
         if color_count <= 0:
             raise ValueError("color_count must be positive.")
         if not self.node_ids:
@@ -507,14 +501,7 @@ class TabuCol:
         max_restarts: Optional[int] = None,
         verbose: bool = False,
     ) -> Tuple[Dict[int, int], int]:
-        """
-        Search for a coloring with as few colors as TabuCol can find.
 
-        DSATUR first supplies a feasible upper bound. TabuCol then starts at
-        one fewer color and uses each feasible coloring to warm-start the next
-        fixed-k search. If TabuCol fails, the previous feasible coloring is
-        returned.
-        """
         if min_colors <= 0:
             raise ValueError("min_colors must be positive.")
         if not self.node_ids:

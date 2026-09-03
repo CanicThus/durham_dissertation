@@ -251,7 +251,6 @@ class AntRLF:
         return normalized[-1][0]
 
     def _select_seed(self, uncolored: Set[int]) -> int:
-        """Sigma=2: select the first vertex of a color class uniformly."""
         if not uncolored:
             raise ValueError("Cannot select a seed from an empty set.")
         return self.rng.choice(sorted(uncolored))
@@ -261,7 +260,7 @@ class AntRLF:
         candidates: Iterable[int],
         color_class: Sequence[int],
     ) -> Dict[int, float]:
-        """Expose the normalized ANT-RLF transition probabilities."""
+
         ordered = sorted(set(candidates))
         if not ordered:
             return {}
@@ -307,8 +306,7 @@ class AntRLF:
         color_class: Sequence[int],
         uncolored: Optional[Set[int]] = None,
     ) -> int:
-        # ``uncolored`` is accepted for compatibility with the earlier
-        # project implementation.  ANT-RLF(2,2) evaluates eta on W, i.e.
+        # ANT-RLF(2,2) evaluates eta on W, i.e.
         # the feasible candidate set, so no wider set is needed here.
         del uncolored
         ordered = sorted(set(candidates))
@@ -380,11 +378,10 @@ class AntRLF:
         color_count: Optional[int] = None,
     ) -> None:
         """
-        Apply the paper's colony update ``M = rho*M + dM``.
+        colony update 'M = rho*M + dM'.
 
-        Internally, ``ant_solutions`` is a sequence of full AntSolution
-        tuples, so every ant contributes.  ``(color_classes, color_count)``
-        is also accepted for compatibility with the former private method.
+        Internally, 'ant_solutions' is a sequence of full AntSolution
+        tuples, so every ant contributes.
         """
         if color_count is None:
             solutions = list(ant_solutions)
@@ -545,8 +542,7 @@ def import_template_graph():
 
 
 def draw_graph(graph) -> None:
-    # Visualization is optional; keep the coloring algorithm importable in
-    # benchmark environments that install SNAP but not plotting packages.
+
     import matplotlib.pyplot as plt
     import networkx as nx
 
