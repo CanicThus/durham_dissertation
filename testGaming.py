@@ -1,29 +1,3 @@
-"""Benchmark traversal and color-choice modes in ``coloringGame.py``.
-
-Like ``test.py``, this script prepares Stanford SNAP datasets, records JSON
-results, and can generate execution-time and color-count plots.  It also uses
-SNAP to generate reproducible G(n,m) random graphs under ``out/generated``.
-For every selected or generated graph it runs the same six
-one-factor-at-a-time mode cases.  In every group, only the named mode is
-varied and the other tested mode keeps its default.  The all-default
-configuration intentionally appears once per group.
-
-Mode meanings
--------------
-``traverse_mode`` (default: ``"forward"``)
-    Controls the order in which nodes are visited in each improvement round:
-    ascending node ID (forward), descending node ID (reverse), or a seeded
-    shuffled order (random).
-
-``color_choice_mode`` (default: ``"forward"``)
-    Controls the order in which candidate color IDs are examined: ascending
-    (forward), descending (reverse), or seeded shuffled order (random).  Since
-    the algorithm scans every color and only replaces the current best on a
-    strict payoff improvement, this order breaks ties between equally good
-    colors; it is not a first-improvement policy.
-
-"""
-
 from __future__ import annotations
 
 import argparse

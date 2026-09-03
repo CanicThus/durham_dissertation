@@ -1,15 +1,3 @@
-"""Benchmark graph-coloring algorithms on SNAP random undirected graphs.
-
-This script follows the benchmark flow in ``test.py`` but replaces downloaded
-datasets with reproducible SNAP G(n, m) graphs.  The clean generated edge
-lists are saved under ``out/generated`` by default.  ColoringGame participates
-with its class defaults only; this script exposes no ColoringGame mode options.
-
-Example::
-
-    python testRandom.py --graph-count 10 --edge-probabilities 0.1
-"""
-
 from __future__ import annotations
 
 import argparse

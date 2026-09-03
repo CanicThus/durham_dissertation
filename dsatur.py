@@ -24,15 +24,6 @@ TEMPLATE_GRAPH_PATH = "src/graph.txt"
 
 
 class DSATUR:
-    """
-    DSATUR graph coloring algorithm.
-
-    DSATUR means degree of saturation. At each step, the algorithm selects
-    the uncolored vertex whose colored neighborhood uses the largest number
-    of distinct colors. Ties are broken by larger graph degree, then smaller
-    node id. The selected vertex receives the smallest feasible color.
-    """
-
     def __init__(
         self,
         node_num: int = 5,

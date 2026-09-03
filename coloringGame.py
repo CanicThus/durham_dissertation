@@ -10,15 +10,6 @@ TEMPLATE_GRAPH_PATH = "src/graph.txt"
 
 
 class coloring_game:
-    """
-    Selfish-improvement graph coloring game from
-    "Playing a Game to Bound the Chromatic Number".
-
-    Vertices are players. Every player can choose one of the color labels.
-    A vertex gets payoff 0 if any neighbor has the same color; otherwise its
-    payoff is the number of vertices currently using the same color.
-    """
-
     def __init__(
         self,
         node_num: int = 5,

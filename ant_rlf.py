@@ -1,23 +1,3 @@
-"""
-ANT-RLF/ANTCOL constructive graph coloring.
-
-The implementation follows the ANT-RLF(2, 2) variant described by Costa
-and Hertz in "Ants can colour graphs" (JORS, 1997):
-
-1. Each ant builds one maximal independent color class at a time.
-2. The first vertex of every class is selected uniformly at random.
-3. A later candidate ``v`` is sampled with weight
-   ``tau(v, C) ** alpha * eta(v, W) ** beta``, where ``tau`` is the
-   average pairwise pheromone between ``v`` and the current class ``C``,
-   and ``eta(v, W) = |W| - deg_W(v)`` is the RLF desirability.
-4. Every ant reinforces non-adjacent vertex pairs that it put in the same
-   class.  An ant using ``k`` colors deposits ``1 / k`` (scaled by ``q``).
-5. At the end of an iteration, trails are updated by ``M = rho * M + dM``.
-
-This module intentionally contains no TabuCol/local-search phase.
-Paper: https://doi.org/10.1057/palgrave.jors.2600357
-"""
-
 from __future__ import annotations
 
 import math
@@ -37,18 +17,6 @@ AntSolution = Tuple[Coloring, int, ColorClasses]
 
 
 class AntRLF:
-    """
-    Ant-colony graph coloring with an ANT-RLF construction rule.
-
-    ``rho`` is the trail-retention coefficient used in the paper's update
-    ``M = rho * M + dM``.  Consequently, the evaporated fraction is
-    ``1 - rho``.  With the default ``q=1``, every ant deposits exactly
-    ``1 / color_count`` on each same-class vertex pair.
-
-    ``Ant_Ref`` is retained as a backwards-compatible alias because the
-    repository benchmark imports that historical misspelling.
-    """
-
     def __init__(
         self,
         graph_name: str = "ant_ref",

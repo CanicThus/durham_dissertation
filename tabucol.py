@@ -20,14 +20,6 @@ TEMPLATE_GRAPH_PATH = "src/graph.txt"
 
 
 class TabuCol:
-    """
-    Graph coloring with the TabuCol tabu-search algorithm.
-
-    TabuCol solves the fixed-k coloring problem by minimizing conflicting
-    edges. The public solve method repeatedly calls TabuCol with decreasing
-    color limits and keeps the best feasible coloring found.
-    """
-
     def __init__(
         self,
         node_num: int = 5,
