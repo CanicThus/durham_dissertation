@@ -1,7 +1,0 @@
-Dataset as20000102: nodes=1000, edges=2664, graph=data\snap\cleaned\as20000102.n1000.undirected.txt
-  coloring_game: status=ok, time=211.638502s, colors=12, valid=True, conflicts=0
-  ant_ref: status=ok, time=7262.022496s, colors=10, valid=True, conflicts=0
-  tabucol: status=ok, time=86.437747s, colors=15, valid=True, conflicts=0
-  dsatur: status=ok, time=0.187367s, colors=10, valid=True, conflicts=0
-
-  dsatur有明显问题 速度快太多了
