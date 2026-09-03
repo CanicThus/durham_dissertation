@@ -226,13 +226,7 @@ def run_default_coloring_game(ctx: RunContext) -> Dict[str, object]:
 
 
 def get_random_algorithm_registry() -> Dict[str, AlgorithmSpec]:
-    """Return test.py algorithms plus the defaults-only ColoringGame case."""
-
     return {
-        "coloring_game": AlgorithmSpec(
-            "coloring_game",
-            run_default_coloring_game,
-        ),
         **get_algorithm_registry(),
     }
 

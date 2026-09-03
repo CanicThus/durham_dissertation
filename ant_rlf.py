@@ -144,10 +144,6 @@ class AntRLF:
         self.edges = sorted(edge_set)
         self._reset_search_state(reset_pheromone=True)
 
-    def _rebuild_internal_state(self) -> None:
-        """Backward-compatible name used by the earlier project version."""
-        self._rebuild_state()
-
     def _reset_search_state(self, reset_pheromone: bool = True) -> None:
         self.rng = random.Random(self.random_seed)
         self.node_color = {}

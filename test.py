@@ -512,7 +512,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-nodes",
         type=int,
-        default=1000,
+        default=100,
         help="Use an induced subgraph from the first N SNAP nodes. Use 0 for full graph.",
     )
     parser.add_argument("--force-download", action="store_true")
